@@ -1,6 +1,6 @@
  -include .env
 
-.PHONY: all build clean fmt test test-gas anvil deploy-anvil demo-e2e \
+.PHONY: all build clean fmt test test-gas install anvil deploy-anvil demo-e2e \
         sm-schedule sm-activate time-6m time-1y ngo-add ngo-finalize \
         deposit harvest roll finalize-root settle approve-router \
         claim-ngo claim-user
@@ -36,6 +36,14 @@ build: ; forge build
 fmt:   ; forge fmt
 test:  ; forge test -vv
 test-gas: ; forge test --gas-report -vv
+
+# Install external dependencies into lib/
+install:
+	forge install \
+	  OpenZeppelin/openzeppelin-contracts \
+	  OpenZeppelin/openzeppelin-contracts-upgradeable \
+	  foundry-rs/forge-std \
+	  Se7en-Seas/boring-vault
 
 anvil: ; anvil --block-time 1
 

@@ -81,3 +81,20 @@ All notable changes to this repository will be documented in this file. This pro
   - `foundry-rs/forge-std`
   - `Se7en-Seas/boring-vault` (references/decoders)
 - After installation, ensure imports compile and add minimal unit tests.
+
+## [0.4.2] - Tooling: Install Target
+- Added `install` target in `Makefile` to fetch dependencies via `forge install`:
+  - `OpenZeppelin/openzeppelin-contracts`, `OpenZeppelin/openzeppelin-contracts-upgradeable`, `foundry-rs/forge-std`, `Se7en-Seas/boring-vault`.
+- Intention: run `make install` before build/test to ensure `lib/` is populated.
+
+## [0.5.0] - Manager (Base Merkle Gating)
+- Implemented a minimal concrete `ManagerWithMerkleVerification`:
+  - Stores `allowListRoot`, `owner`, and immutable `boringVault` reference.
+  - `setAllowListRoot` gated by `owner` and evented.
+  - `forward(target,data,proof)` verifies Merkle inclusion for leaf `keccak256(abi.encode(target, selector, keccak256(data))))` then performs low-level call.
+  - Emits `Forwarded` on success; reverts `NotAllowed` on invalid proof.
+  - Note: decoders/sanitizers remain pending; this is a safe base to layer them on.
+- Tests added (`test/unit/Test05_ManagerWithMerkle.t.sol`):
+  - Root can only be set by owner.
+  - Forwarding succeeds for authorized leaf, reverts for wrong target/mutated data.
+  - Single-leaf Merkle proof path validates gating behavior.

@@ -1,0 +1,18 @@
+[profile.default]
+src = "src"
+test = "test"
+script = "script"
+libs = ["lib"]
+solc_version = "0.8.24"
+
+remappings = [
+  "openzeppelin-contracts/=lib/openzeppelin-contracts/",
+  "@openzeppelin/=lib/openzeppelin-contracts/",
+  "openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/",
+  "forge-std/=lib/forge-std/src/",
+  "boring-vault/=lib/boring-vault/src/"
+]
+
+[fmt]
+line_length = 120
+tab_width = 2

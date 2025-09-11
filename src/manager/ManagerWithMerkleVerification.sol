@@ -48,7 +48,7 @@ contract ManagerWithMerkleVerification {
     emit AllowListRootSet(old, newRoot);
   }
 
-  /// @notice Forward a call to `target` if the `(target, selector, keccak256(data))` leaf is allowed by `allowListRoot`
+  /// @notice Forward a call to `target` if the `(target, selector, sanitized)` leaf is allowed by `allowListRoot`
   /// @param target The target contract to forward the call to
   /// @param data Calldata to forward (selector + encoded args)
   /// @param proof Merkle proof authorizing this call under the current allow-list root
@@ -59,9 +59,9 @@ contract ManagerWithMerkleVerification {
       selector := calldataload(data.offset)
     }
 
-    // Minimal leaf derivation: keccak(target, selector, keccak256(data))
-    // Future work: replace keccak(data) with decoder/sanitizer-produced bytes as per AGENTS.md
-    bytes32 leaf = keccak256(abi.encode(target, selector, keccak256(data)));
+    // Leaf derivation with sanitization hook: keccak(target, selector, sanitized)
+    bytes memory sanitized = _sanitizedData(target, selector, data);
+    bytes32 leaf = keccak256(abi.encode(target, selector, keccak256(sanitized)));
     if (!MerkleProof.verifyCalldata(proof, allowListRoot, leaf)) revert NotAllowed();
 
     (bool ok, bytes memory ret) = target.call{value: msg.value}(data);
@@ -71,6 +71,17 @@ contract ManagerWithMerkleVerification {
       }
     }
     emit Forwarded(target, selector, data);
+  }
+
+  /// @notice Produce sanitized bytes used to derive the allow-list leaf.
+  /// @dev Default implementation uses the raw calldata bytes (so leaf uses keccak256(data)).
+  function _sanitizedData(address /*target*/, bytes4 /*selector*/, bytes calldata data)
+    internal
+    pure
+    virtual
+    returns (bytes memory)
+  {
+    return data;
   }
 
   uint256[50] private __gap;

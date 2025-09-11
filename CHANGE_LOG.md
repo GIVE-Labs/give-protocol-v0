@@ -98,3 +98,37 @@ All notable changes to this repository will be documented in this file. This pro
   - Root can only be set by owner.
   - Forwarding succeeds for authorized leaf, reverts for wrong target/mutated data.
   - Single-leaf Merkle proof path validates gating behavior.
+
+## [0.5.1] - Decoders: ERC-4626 and Sanitized Leaves
+- Added `ERC4626DecoderAndSanitizer` with decoding helpers for:
+  - `deposit(uint256,address)` → sanitized bytes: `(receiver)`
+  - `withdraw(uint256,address,address)` → sanitized bytes: `(receiver, owner)`
+- Introduced `GiveManager` that overrides the manager’s sanitization hook to use ERC-4626 sanitized bytes for known selectors, falling back to full calldata hashing for others.
+- Updated leaf derivation to `keccak(abi.encode(target, selector, keccak256(sanitizedBytes)))` and kept backward-compatible default where sanitizedBytes = calldata.
+- Added tests:
+  - `Test06_Decoder_ERC4626.t.sol` verifies that an allow-listed receiver authorizes `deposit`, and mutating the receiver reverts.
+- Result: Manager now supports decoder/sanitizer-driven allow-listing for ERC-4626 interactions; UniswapV3/Pendle/Euler decoders remain TODO.
+
+## [0.5.2] - MVP Scope Clarification (Defer Advanced Modules)
+- Added `docs/MVP_SCOPE.md` describing an MVP that includes only: Vault (ERC-4626 + epochs/Merkle), DonationRouter, NGORegistry, and minimal StrategyManager.
+- Marked advanced modules as FUTURE in code headers: `GiveManager` and all decoders/sanitizers (UniswapV3/Pendle/Euler/4626) — kept as placeholders, not required for MVP runbooks.
+- No breaking changes to MVP flows; existing unit/integration tests for vault/router/registry remain the primary acceptance checks.
+
+## [0.5.3] - Docs: MVP Runbook
+- Added a step-by-step local runbook to `docs/MVP_SCOPE.md` covering:
+  - Anvil startup, deployment, environment setup
+  - Adapter activation for demo
+  - Deposit → harvest → roll → finalize root
+  - NGO add (queue/finalize), epoch settlement, approvals
+  - NGO claim and user claim
+- The runbook uses existing Makefile targets and highlights conservation checks and env overrides.
+
+## [0.5.4] - Docs: MVP Rationale Deep Dive
+- Expanded `docs/MVP_SCOPE.md` with explanations for:
+  - Why epochs and `rollEpoch()` are required before finalization
+  - Why the harvest window gates deposits/mints but never withdraw/redeem
+  - Why conservation identity is enforced at root finalization
+  - Why NGO add uses a 1‑year timelock and how local time‑fast‑forward simulates it
+  - What settlement does and why eligibility is checked at settlement time
+  - Why the router needs vault approval, and difference between NGO vs user claims
+  - Core invariants the MVP upholds

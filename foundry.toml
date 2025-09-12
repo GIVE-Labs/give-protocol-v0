@@ -4,6 +4,7 @@ test = "test"
 script = "script"
 libs = ["lib"]
 solc_version = "0.8.24"
+via_ir = true
 
 remappings = [
   "openzeppelin-contracts/=lib/openzeppelin-contracts/",

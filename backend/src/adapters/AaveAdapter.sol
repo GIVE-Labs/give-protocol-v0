@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "../interfaces/IYieldAdapter.sol";
+import "../vault/IConfigurableAdapter.sol";
 import "../utils/Errors.sol";
 import "../access/RoleAware.sol";
 
@@ -44,7 +45,7 @@ struct ReserveData {
  * @dev Yield adapter for Aave V3 protocol (supply-only)
  * @notice Supplies assets to Aave and tracks yield through aToken balance changes
  */
-contract AaveAdapter is IYieldAdapter, RoleAware, ReentrancyGuard, Pausable {
+contract AaveAdapter is IYieldAdapter, IConfigurableAdapter, RoleAware, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
     // === Cached roles ===
@@ -56,7 +57,7 @@ contract AaveAdapter is IYieldAdapter, RoleAware, ReentrancyGuard, Pausable {
 
     // === State Variables ===
     IERC20 public immutable override asset;
-    address public immutable override vault;
+    address public override vault;
     IPool public immutable aavePool;
     IAToken public immutable aToken;
 
@@ -79,12 +80,12 @@ contract AaveAdapter is IYieldAdapter, RoleAware, ReentrancyGuard, Pausable {
 
     // === Constructor ===
     constructor(address roleManager_, address _asset, address _vault, address _aavePool) RoleAware(roleManager_) {
-        if (_asset == address(0) || _vault == address(0) || _aavePool == address(0)) {
+        if (_asset == address(0) || _aavePool == address(0)) {
             revert Errors.ZeroAddress();
         }
 
         asset = IERC20(_asset);
-        vault = _vault;
+        vault = _vault; // Can be zero initially, will be set via configureForVault
         aavePool = IPool(_aavePool);
 
         // Get aToken address from Aave pool
@@ -104,9 +105,19 @@ contract AaveAdapter is IYieldAdapter, RoleAware, ReentrancyGuard, Pausable {
         IERC20(asset).forceApprove(_aavePool, type(uint256).max);
     }
 
+    /**
+     * @dev Configures the adapter for a specific vault
+     * @param _vault The vault address to configure
+     */
+    function configureForVault(address _vault) external override {
+        require(vault == address(0) || vault == _vault, "AaveAdapter: Already configured");
+        require(_vault != address(0), "AaveAdapter: Invalid vault");
+        vault = _vault;
+    }
+
     // === Modifiers ===
     modifier onlyVault() {
-        if (msg.sender != vault) revert Errors.OnlyVault();
+        if (vault == address(0) || msg.sender != vault) revert Errors.OnlyVault();
         _;
     }
 

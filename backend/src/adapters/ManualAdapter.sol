@@ -6,6 +6,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import {IYieldAdapter} from "../interfaces/IYieldAdapter.sol";
+import {IConfigurableAdapter} from "../vault/IConfigurableAdapter.sol";
 import {Errors} from "../utils/Errors.sol";
 import {RoleAware} from "../access/RoleAware.sol";
 
@@ -14,7 +15,7 @@ import {RoleAware} from "../access/RoleAware.sol";
  * @dev Yield adapter that supports off-chain, manually managed strategies.
  * @notice Assets can be moved by a designated operator to another chain and returned with yield.
  */
-contract ManualAdapter is IYieldAdapter, RoleAware, ReentrancyGuard {
+contract ManualAdapter is IYieldAdapter, IConfigurableAdapter, RoleAware, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // === Cached roles ===
@@ -23,7 +24,7 @@ contract ManualAdapter is IYieldAdapter, RoleAware, ReentrancyGuard {
 
     // === Core state ===
     IERC20 public immutable override asset;
-    address public immutable override vault;
+    address public override vault;
 
     uint256 public totalInvested;
     uint256 public totalHarvested;
@@ -33,7 +34,7 @@ contract ManualAdapter is IYieldAdapter, RoleAware, ReentrancyGuard {
     event LossReported(address indexed operator, uint256 amount);
 
     constructor(address roleManager_, address asset_, address vault_) RoleAware(roleManager_) {
-        if (roleManager_ == address(0) || asset_ == address(0) || vault_ == address(0)) {
+        if (roleManager_ == address(0) || asset_ == address(0)) {
             revert Errors.ZeroAddress();
         }
 
@@ -41,11 +42,21 @@ contract ManualAdapter is IYieldAdapter, RoleAware, ReentrancyGuard {
         GUARDIAN_ROLE = roleManager.ROLE_GUARDIAN();
 
         asset = IERC20(asset_);
-        vault = vault_;
+        vault = vault_; // Can be zero initially, will be set via configureForVault
+    }
+
+    /**
+     * @dev Configures the adapter for a specific vault
+     * @param _vault The vault address to configure
+     */
+    function configureForVault(address _vault) external override {
+        require(vault == address(0) || vault == _vault, "ManualAdapter: Already configured");
+        require(_vault != address(0), "ManualAdapter: Invalid vault");
+        vault = _vault;
     }
 
     modifier onlyVault() {
-        if (msg.sender != vault) revert Errors.OnlyVault();
+        if (vault == address(0) || msg.sender != vault) revert Errors.OnlyVault();
         _;
     }
 

@@ -18,26 +18,30 @@ import {ManualAdapter} from "../src/adapters/ManualAdapter.sol";
 import {RegistryTypes} from "../src/manager/RegistryTypes.sol";
 
 /**
- * @dev Comprehensive deployment script for Scroll.
- *      Fill in all placeholder addresses with the actual deployment values before running.
+ * @dev Comprehensive deployment script for Scroll Mainnet.
+ *      Configured for Nanyang Press Foundation campaign with Aave USDC adapter.
  */
 contract DeployScroll is Script {
-    address internal constant SCROLL_MULTISIG = address(0); // TODO: set protocol admin / multisig
+    // Protocol administration - using deployer as initial admin
+    address internal SCROLL_MULTISIG; // Will be set from deployer
 
-    // === External addresses on Scroll ===
-    address internal constant USDC = 0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4; // TODO: Scroll USDC token address
-    address internal constant WETH = 0x5300000000000000000000000000000000000004; // TODO: Scroll WETH token address
-    address internal constant AAVE_POOL_USDC = 0x11fCfe756c05AD438e312a7fd934381537D3cFfe; // TODO: Scroll Aave pool for USDC
-    address internal constant AAVE_POOL_WETH = 0x11fCfe756c05AD438e312a7fd934381537D3cFfe; // TODO: Scroll Aave pool for WETH
+    // === External addresses on Scroll Mainnet ===
+    address internal constant USDC = 0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4; // Scroll USDC.e
+    address internal constant WETH = 0x5300000000000000000000000000000000000004; // Scroll WETH
+    address internal constant AAVE_POOL = 0x11fCfe756c05AD438e312a7fd934381537D3cFfe; // Aave V3 Pool on Scroll
 
     // Treasury & payout configuration
-    address internal constant PROTOCOL_TREASURY = 0x98cF137F0d8F2C72F22fa44Ec1076D27ab0cd245; // TODO: set Treasury wallet
-    address internal constant PROTOCOL_GUARDIAN = 0x98cF137F0d8F2C72F22fa44Ec1076D27ab0cd245; // TODO: guardian/operator address
+    address internal PROTOCOL_TREASURY; // Will be set from deployer initially
+    address internal PROTOCOL_GUARDIAN; // Will be set from deployer initially
 
-    // Metadata placeholders
-    string internal constant USDC_STRATEGY_URI = "ipfs://usdc-strategy";
-    string internal constant WETH_STRATEGY_URI = "ipfs://weth-strategy";
-    string internal constant MANUAL_STRATEGY_URI = "ipfs://manual-strategy";
+    // Nanyang Press Foundation campaign configuration
+    address internal constant NPF_CURATOR = 0x98cF137F0d8F2C72F22fa44Ec1076D27ab0cd245; // Update with actual curator
+    address internal constant NPF_PAYOUT = 0x98cF137F0d8F2C72F22fa44Ec1076D27ab0cd245; // Update with actual payout wallet
+
+    // Strategy metadata URIs
+    string internal constant USDC_STRATEGY_URI = "ipfs://QmAaveUSDCConservativeStrategy"; // Update with actual IPFS
+    string internal constant WETH_STRATEGY_URI = "ipfs://QmAaveWETHModerateStrategy"; // Update with actual IPFS
+    string internal constant MANUAL_STRATEGY_URI = "ipfs://QmManualOffChainStrategy"; // Update with actual IPFS
 
     uint256 internal constant MAX_TVL_DEFAULT = type(uint256).max;
 
@@ -60,6 +64,13 @@ contract DeployScroll is Script {
 
     function run() external {
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");
+        address deployer = vm.addr(deployerKey);
+
+        // Use deployer as initial admin, can be transferred later
+        SCROLL_MULTISIG = deployer;
+        PROTOCOL_TREASURY = deployer;
+        PROTOCOL_GUARDIAN = deployer;
+
         vm.startBroadcast(deployerKey);
 
         Deployment memory out;
@@ -67,10 +78,12 @@ contract DeployScroll is Script {
         RoleManager roleManager = new RoleManager(SCROLL_MULTISIG);
         out.roleManager = address(roleManager);
 
-        // Grant critical roles to the multisig and deployer as needed
+        // Grant critical roles
         roleManager.grantRole(roleManager.ROLE_GUARDIAN(), PROTOCOL_GUARDIAN);
         roleManager.grantRole(roleManager.ROLE_STRATEGY_ADMIN(), SCROLL_MULTISIG);
         roleManager.grantRole(roleManager.ROLE_TREASURY(), PROTOCOL_TREASURY);
+        roleManager.grantRole(roleManager.ROLE_CAMPAIGN_ADMIN(), SCROLL_MULTISIG);
+        roleManager.grantRole(roleManager.ROLE_VAULT_OPS(), SCROLL_MULTISIG);
 
         StrategyRegistry strategyRegistry = new StrategyRegistry(address(roleManager));
         out.strategyRegistry = address(strategyRegistry);
@@ -94,6 +107,11 @@ contract DeployScroll is Script {
         VaultDeploymentLib vaultDeployer = new VaultDeploymentLib();
         ManagerDeploymentLib managerDeployer = new ManagerDeploymentLib();
 
+        // Grant roles to helper contracts
+        roleManager.grantRole(roleManager.DEFAULT_ADMIN_ROLE(), address(managerDeployer));
+        roleManager.grantRole(roleManager.ROLE_STRATEGY_ADMIN(), address(managerDeployer));
+        roleManager.grantRole(roleManager.ROLE_CAMPAIGN_ADMIN(), address(managerDeployer));
+
         // Deploy factory with helper contract references
         CampaignVaultFactory vaultFactory = new CampaignVaultFactory(
             address(roleManager),
@@ -111,25 +129,28 @@ contract DeployScroll is Script {
         roleManager.grantRole(roleManager.DEFAULT_ADMIN_ROLE(), address(vaultFactory));
 
         // === Deploy adapters ===
+        // Deploy Aave USDC adapter for Nanyang Press Foundation
         AaveAdapter usdcAdapter = new AaveAdapter(
             address(roleManager),
             USDC,
-            address(0), // will be reassigned when vault is deployed
-            AAVE_POOL_USDC
+            address(0), // will be configured when vault is deployed
+            AAVE_POOL
         );
         out.usdcAdapter = address(usdcAdapter);
 
+        // Optional: Deploy WETH adapter for future campaigns
         AaveAdapter wethAdapter = new AaveAdapter(
             address(roleManager),
             WETH,
             address(0),
-            AAVE_POOL_WETH
+            AAVE_POOL
         );
         out.wethAdapter = address(wethAdapter);
 
+        // Optional: Deploy manual adapter for off-chain strategies
         ManualAdapter manualAdapter = new ManualAdapter(
             address(roleManager),
-            USDC, // TODO: choose asset the manual strategy manages
+            USDC,
             address(0)
         );
         out.manualAdapter = address(manualAdapter);
@@ -159,45 +180,55 @@ contract DeployScroll is Script {
             MAX_TVL_DEFAULT
         );
 
-        // === Register a sample campaign ===
-        address campaignCreator = vm.envAddress("CAMPAIGN_CREATOR"); // TODO: supply creator address
-        address curator = vm.envAddress("CAMPAIGN_CURATOR"); // TODO: supply curator address
-        address payoutWallet = vm.envAddress("CAMPAIGN_PAYOUT"); // TODO: supply payout wallet
+        // === Create Nanyang Press Foundation Campaign ===
+        console.log("Creating Nanyang Press Foundation campaign...");
 
-        vm.startBroadcast(deployerKey);
-        vm.prank(campaignCreator);
+        // Submit campaign
         uint64 campaignId = campaignRegistry.submitCampaign(
-            "ipfs://nanyang-press-foundation", // metadata URI placeholder
-            curator,
-            payoutWallet,
-            RegistryTypes.LockProfile.Minutes1
+            "ipfs://QmNanyangPressFoundation2025", // Update with actual IPFS hash
+            NPF_CURATOR,
+            NPF_PAYOUT,
+            RegistryTypes.LockProfile.Days90  // 90-day lock for supporters
         );
         out.campaignId = campaignId;
 
-        vm.prank(SCROLL_MULTISIG);
+        // Approve campaign
         campaignRegistry.approveCampaign(campaignId);
 
-        vm.prank(SCROLL_MULTISIG);
+        // Attach USDC Aave strategy to campaign
         campaignRegistry.attachStrategy(campaignId, out.usdcStrategyId);
 
+        console.log("Deploying vault for Nanyang Press Foundation...");
+
+        // Deploy vault for the campaign
         CampaignVaultFactory.Deployment memory deployment = vaultFactory.deployCampaignVault(
             campaignId,
             out.usdcStrategyId,
-            RegistryTypes.LockProfile.Minutes1,
-            "Nanyang Press Foundation",
+            RegistryTypes.LockProfile.Days90,
+            "Nanyang Press Foundation Vault",
             "NPF-USDC",
             1e6 // minimum deposit (1 USDC)
         );
         out.vault = deployment.vault;
         out.strategyManager = deployment.strategyManager;
 
-        // Wire adapters now that vault exists
+        // Configure the deployed strategy manager
         StrategyManager manager = StrategyManager(deployment.strategyManager);
-        manager.setStrategyRegistry(address(strategyRegistry));
-        manager.setPayoutRouter(address(payoutRouter));
-        manager.setAdapterApproval(out.usdcAdapter, true);
-        manager.setActiveAdapter(out.usdcAdapter);
+        manager.updateVaultParameters(100, 50, 50); // 1% buffer, 0.5% invest/divest thresholds
 
         vm.stopBroadcast();
+
+        // Log deployment addresses
+        console.log("====== Deployment Complete ======");
+        console.log("RoleManager:", out.roleManager);
+        console.log("StrategyRegistry:", out.strategyRegistry);
+        console.log("CampaignRegistry:", out.campaignRegistry);
+        console.log("PayoutRouter:", out.payoutRouter);
+        console.log("VaultFactory:", out.vaultFactory);
+        console.log("USDC Aave Adapter:", out.usdcAdapter);
+        console.log("Campaign ID:", campaignId);
+        console.log("Campaign Vault:", out.vault);
+        console.log("Strategy Manager:", out.strategyManager);
+        console.log("=================================");
     }
 }

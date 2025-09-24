@@ -35,8 +35,8 @@ contract DeployScroll is Script {
     address internal PROTOCOL_GUARDIAN; // Will be set from deployer initially
 
     // Nanyang Press Foundation campaign configuration
-    address internal constant NPF_CURATOR = 0x98cF137F0d8F2C72F22fa44Ec1076D27ab0cd245; // Update with actual curator
-    address internal constant NPF_PAYOUT = 0x98cF137F0d8F2C72F22fa44Ec1076D27ab0cd245; // Update with actual payout wallet
+    address internal constant NPF_CURATOR = 0x98cF137F0d8F2C72F22fa44Ec1076D27ab0cd245; // Nanyang Press Foundation curator address
+    address internal constant NPF_PAYOUT = 0x98cF137F0d8F2C72F22fa44Ec1076D27ab0cd245; // Nanyang Press Foundation beneficiary wallet
 
     // Strategy metadata URIs
     string internal constant USDC_STRATEGY_URI = "ipfs://QmAaveUSDCConservativeStrategy"; // Update with actual IPFS
@@ -182,12 +182,14 @@ contract DeployScroll is Script {
 
         // === Create Nanyang Press Foundation Campaign ===
         console.log("Creating Nanyang Press Foundation campaign...");
+        console.log("Beneficiary: Nanyang Press Foundation");
+        console.log("Mission: Supporting independent journalism and press freedom in Southeast Asia");
 
-        // Submit campaign
+        // Submit campaign for Nanyang Press Foundation
         uint64 campaignId = campaignRegistry.submitCampaign(
-            "ipfs://QmNanyangPressFoundation2025", // Update with actual IPFS hash
-            NPF_CURATOR,
-            NPF_PAYOUT,
+            "ipfs://QmNanyangPressFoundation2025", // Campaign metadata with foundation details
+            NPF_CURATOR,  // Foundation curator managing the campaign
+            NPF_PAYOUT,   // Foundation wallet receiving the yield donations
             RegistryTypes.LockProfile.Days90  // 90-day lock for supporters
         );
         out.campaignId = campaignId;
@@ -198,14 +200,16 @@ contract DeployScroll is Script {
         // Attach USDC Aave strategy to campaign
         campaignRegistry.attachStrategy(campaignId, out.usdcStrategyId);
 
-        console.log("Deploying vault for Nanyang Press Foundation...");
+        console.log("Deploying donation vault for Nanyang Press Foundation...");
 
-        // Deploy vault for the campaign
+        // Deploy vault for Nanyang Press Foundation campaign
+        // This vault will collect USDC donations and generate yield through Aave
+        // All yield goes to the foundation while donors keep their principal
         CampaignVaultFactory.Deployment memory deployment = vaultFactory.deployCampaignVault(
             campaignId,
             out.usdcStrategyId,
             RegistryTypes.LockProfile.Days90,
-            "Nanyang Press Foundation Vault",
+            "Nanyang Press Foundation Yield Vault",
             "NPF-USDC",
             1e6 // minimum deposit (1 USDC)
         );
@@ -219,16 +223,34 @@ contract DeployScroll is Script {
         vm.stopBroadcast();
 
         // Log deployment addresses
-        console.log("====== Deployment Complete ======");
+        console.log("\n====== Deployment Complete ======");
+        console.log("\n--- Core Infrastructure ---");
         console.log("RoleManager:", out.roleManager);
         console.log("StrategyRegistry:", out.strategyRegistry);
         console.log("CampaignRegistry:", out.campaignRegistry);
         console.log("PayoutRouter:", out.payoutRouter);
         console.log("VaultFactory:", out.vaultFactory);
+
+        console.log("\n--- Yield Adapters ---");
         console.log("USDC Aave Adapter:", out.usdcAdapter);
+        console.log("USDC Strategy ID:", out.usdcStrategyId);
+
+        console.log("\n--- Nanyang Press Foundation Campaign ---");
         console.log("Campaign ID:", campaignId);
-        console.log("Campaign Vault:", out.vault);
+        console.log("Beneficiary: Nanyang Press Foundation");
+        console.log("Beneficiary Wallet:", NPF_PAYOUT);
+        console.log("Campaign Curator:", NPF_CURATOR);
+        console.log("Donation Vault:", out.vault);
         console.log("Strategy Manager:", out.strategyManager);
+        console.log("Asset: USDC (", USDC, ")");
+        console.log("Yield Source: Aave V3 on Scroll");
+        console.log("Lock Period: 90 days");
+        console.log("Min Deposit: 1 USDC");
+
+        console.log("\n=================================");
+        console.log("Supporters can now deposit USDC to:", out.vault);
+        console.log("100% of yield will be donated to Nanyang Press Foundation");
+        console.log("Supporters retain full principal, redeemable after 90 days");
         console.log("=================================");
     }
 }

@@ -14,6 +14,7 @@ import {StrategyManager} from "../src/manager/StrategyManager.sol";
 import {CampaignVault} from "../src/vault/CampaignVault.sol";
 import {GiveVault4626} from "../src/vault/GiveVault4626.sol";
 import {AaveAdapter} from "../src/adapters/AaveAdapter.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ManualAdapter} from "../src/adapters/ManualAdapter.sol";
 import {RegistryTypes} from "../src/manager/RegistryTypes.sol";
 
@@ -190,7 +191,7 @@ contract DeployScroll is Script {
             "ipfs://QmNanyangPressFoundation2025", // Campaign metadata with foundation details
             NPF_CURATOR,  // Foundation curator managing the campaign
             NPF_PAYOUT,   // Foundation wallet receiving the yield donations
-            RegistryTypes.LockProfile.Days90  // 90-day lock for supporters
+            RegistryTypes.LockProfile.Minutes1  // Using 1 minute lock for testing
         );
         out.campaignId = campaignId;
 
@@ -208,7 +209,7 @@ contract DeployScroll is Script {
         CampaignVaultFactory.Deployment memory deployment = vaultFactory.deployCampaignVault(
             campaignId,
             out.usdcStrategyId,
-            RegistryTypes.LockProfile.Days90,
+            RegistryTypes.LockProfile.Minutes1,  // Using 1 minute lock for testing
             "Nanyang Press Foundation Yield Vault",
             "NPF-USDC",
             1e6 // minimum deposit (1 USDC)
@@ -219,6 +220,64 @@ contract DeployScroll is Script {
         // Configure the deployed strategy manager
         StrategyManager manager = StrategyManager(deployment.strategyManager);
         manager.updateVaultParameters(100, 50, 50); // 1% buffer, 0.5% invest/divest thresholds
+
+        // === Test Deposit and Withdrawal Flow ===
+        console.log("\n--- Testing Deposit & Withdrawal Flow ---");
+
+        // Get the vault instance
+        CampaignVault vaultInstance = CampaignVault(payable(deployment.vault));
+
+        // Check deployer's actual USDC balance (should already have USDC)
+        uint256 initialBalance = IERC20(USDC).balanceOf(deployer);
+        console.log("Deployer USDC balance:", initialBalance / 1e6, "USDC");
+
+        require(initialBalance >= 1e6, "Deployer needs at least 1 USDC for testing");
+
+        // Approve vault to spend 1 USDC
+        IERC20(USDC).approve(address(vaultInstance), 1e6);
+        console.log("Approved vault to spend 1 USDC");
+
+        // Deposit 1 USDC
+        uint256 depositAmount = 1e6; // 1 USDC
+        uint256 sharesReceived = vaultInstance.deposit(depositAmount, deployer);
+        console.log("Deposited 1 USDC");
+        console.log("Shares received:", sharesReceived);
+
+        // Check vault balance after deposit
+        uint256 vaultBalance = vaultInstance.balanceOf(deployer);
+        console.log("Vault share balance:", vaultBalance);
+
+        // Get the unlock time
+        uint256 unlockTime = vaultInstance.getNextUnlockTime(deployer);
+        console.log("Position will unlock at timestamp:", unlockTime);
+        console.log("Current timestamp:", block.timestamp);
+        uint256 timeUntilUnlock = unlockTime - block.timestamp;
+        console.log("Time until unlock (seconds):", timeUntilUnlock);
+
+        // Wait 70 seconds (more than 1 minute lock period)
+        console.log("\nWarping time forward 70 seconds...");
+        vm.warp(block.timestamp + 70);
+        console.log("New timestamp:", block.timestamp);
+
+        // Check if position is unlocked
+        uint256 unlockedShares = vaultInstance.getUnlockedShares(deployer);
+        console.log("Unlocked shares available:", unlockedShares);
+
+        // Withdraw the funds
+        console.log("\nWithdrawing funds...");
+        uint256 assetsRedeemed = vaultInstance.redeem(sharesReceived, deployer, deployer);
+        console.log("Shares redeemed:", sharesReceived);
+        console.log("USDC received:", assetsRedeemed / 1e6);
+
+        // Check final balance
+        uint256 finalBalance = IERC20(USDC).balanceOf(deployer);
+        console.log("Final USDC balance (USDC):", finalBalance / 1e6);
+        int256 netChange = int256(finalBalance) - int256(initialBalance);
+        console.log("Net change (USDC):", uint256(netChange < 0 ? -netChange : netChange) / 1e6);
+
+        // Verify withdrawal was successful
+        require(vaultInstance.balanceOf(deployer) == 0, "Should have no shares left");
+        console.log("SUCCESS: Test deposit and withdrawal completed!");
 
         vm.stopBroadcast();
 
@@ -244,7 +303,7 @@ contract DeployScroll is Script {
         console.log("Strategy Manager:", out.strategyManager);
         console.log("Asset: USDC (", USDC, ")");
         console.log("Yield Source: Aave V3 on Scroll");
-        console.log("Lock Period: 90 days");
+        console.log("Lock Period: 1 minute (testing mode)");
         console.log("Min Deposit: 1 USDC");
 
         console.log("\n=================================");
